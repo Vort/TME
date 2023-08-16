@@ -11,6 +11,12 @@ namespace TME
     {
         public Instruction(int newSymbol, int direction, int newState)
         {
+            if (newSymbol != 0 && newSymbol != 1)
+                throw new ArgumentOutOfRangeException("newSymbol");
+            if (direction != 0 && direction != 1)
+                throw new ArgumentOutOfRangeException("direction");
+            if (newState < 0)
+                throw new ArgumentOutOfRangeException("newState");
             NewSymbol = newSymbol;
             Direction = direction;
             NewState = newState;
@@ -213,6 +219,9 @@ namespace TME
 
         Transition[] DecodeBI(BigInteger encoded)
         {
+            if (encoded < BigInteger.Zero)
+                throw new ArgumentOutOfRangeException("encoded");
+
             BigInteger offset = BigInteger.Zero;
             for (int i = 1; ; i++)
             {
