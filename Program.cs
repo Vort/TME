@@ -9,6 +9,10 @@ namespace TME
 {
     class Instruction
     {
+        public Instruction()
+        {
+        }
+
         public Instruction(int newSymbol, int direction, int newState)
         {
             if (newSymbol != 0 && newSymbol != 1)
@@ -52,6 +56,15 @@ namespace TME
 
     class Transition
     {
+        public Transition()
+        {
+            Instructions = new Instruction[2]
+            {
+                new Instruction(),
+                new Instruction()
+            };
+        }
+
         public Transition(
             int NewSymbol0, int Direction0, int NewState0,
             int NewSymbol1, int Direction1, int NewState1)
@@ -91,12 +104,11 @@ namespace TME
             //    throw new Exception();
         }
 
-        void ParseFormat(string ext, out int format, out int @base)
+        void ParseFormat(string ext, out int format, ref int @base)
         {
             if (ext == "bin")
             {
                 format = 0;
-                @base = 256;
             }
             else if (ext.StartsWith("b") &&
                 int.TryParse(ext.Substring(1), out @base) &&
@@ -107,7 +119,6 @@ namespace TME
             else if (ext == "jst")
             {
                 format = 2;
-                @base = 0;
             }
             else
                 throw new NotSupportedException("Unsupported format");
@@ -121,21 +132,26 @@ namespace TME
             int inputFormat = 1;
             int inputBase = 10;
             int outputFormat = 2;
-            int outputBase = 0;
+            int outputBase = 10;
             byte[] inputData = null;
             string outputName = output;
             if (input.Contains('.'))
             {
-                ParseFormat(input.Split('.')[1], out inputFormat, out inputBase);
+                ParseFormat(input.Split('.')[1], out inputFormat, ref inputBase);
                 inputData = File.ReadAllBytes(input);
             }
             else
             {
                 inputData = Encoding.UTF8.GetBytes(input);
             }
+            if (inputFormat == 2)
+                outputFormat = 1;
             if (output != null)
             {
-                ParseFormat(output.Split('.')[1], out outputFormat, out outputBase);
+                if (output.Contains('.'))
+                    ParseFormat(output.Split('.')[1], out outputFormat, ref outputBase);
+                else
+                    throw new Exception("Output format is not specified");
             }
             Transition[] machine = Decode(inputData, inputFormat, inputBase);
             byte[] outputData = Encode(machine, outputFormat, outputBase);
@@ -156,12 +172,88 @@ namespace TME
         Transition[] Decode(byte[] data, int format, int @base)
         {
             BigInteger bi = BigInteger.Zero;
-            if (format == 1)
+            if (format == 2)
             {
-                if (@base == 10)
-                    bi = BigInteger.Parse(Encoding.UTF8.GetString(data).Trim());
-                else
-                    throw new NotSupportedException();
+                var machine = new List<Transition>();
+                var machineRaw = new List<string[]>();
+                var stateNames = new Dictionary<string, int>();
+                var syms = new string[2] { "_", "1" };
+                var dirs = new string[2] { "l", "r" };
+                var lines = Encoding.UTF8.GetString(data).Split(new char[] { '\r', '\n' });
+                foreach (var line in lines)
+                {
+                    int commentIndex = line.IndexOf(';');
+                    var lineClean = line;
+                    if (commentIndex != -1)
+                        lineClean = line.Substring(0, commentIndex);
+                    var words = lineClean.Split(new char[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (words.Length == 0)
+                        continue;
+                    if (words.Length != 5)
+                        throw new Exception("Wrong tuple size");
+                    machineRaw.Add(words);
+                }
+                foreach (var instRaw in machineRaw)
+                {
+                    string curStateS = instRaw[0];
+                    if (!stateNames.ContainsKey(curStateS))
+                    {
+                        stateNames.Add(curStateS, stateNames.Count);
+                        machine.Add(new Transition());
+                    }
+                }
+                foreach (var instRaw in machineRaw)
+                {
+                    string curStateS = instRaw[0];
+                    string curSymbolS = instRaw[1];
+                    string newSymbolS = instRaw[2];
+                    string directionS = instRaw[3];
+                    string newStateS = instRaw[4];
+
+                    if (!syms.Contains(curSymbolS) || !syms.Contains(newSymbolS))
+                        throw new Exception("Only symbols _ and 1 are supported");
+                    if (!dirs.Contains(directionS))
+                        throw new Exception("Only directions l and r are supported");
+
+                    int newState = 0; // halt
+                    if (!newStateS.StartsWith("halt"))
+                    {
+                        if (!stateNames.ContainsKey(newStateS))
+                            throw new Exception($"Unknown new state {newStateS}");
+                        else
+                            newState = stateNames[newStateS] + 1;
+                    }
+
+                    int direction = Array.IndexOf(dirs, directionS);
+                    int curSymbol = Array.IndexOf(syms, curSymbolS);
+                    int newSymbol = Array.IndexOf(syms, newSymbolS);
+
+                    var instruction = machine[stateNames[curStateS]].Instructions[curSymbol];
+                    instruction.NewSymbol = newSymbol;
+                    instruction.Direction = direction;
+                    instruction.NewState = newState;
+                }
+                bi = EncodeBI(machine.ToArray());
+            }
+            else if (format == 1)
+            {
+                var dataS = Encoding.UTF8.GetString(data).ToUpper().ToArray();
+                foreach (char c in dataS)
+                {
+                    if (c == ' ' || c == '\t' || c == '\r' || c == '\n')
+                        continue;
+                    int digit;
+                    if (c >= '0' && c <= '9')
+                        digit = c - '0';
+                    else if (c >= 'A' && c <= 'Z')
+                        digit = c - 'A' + 10;
+                    else
+                        throw new Exception($"Unexpected digit {c}");
+                    if (digit >= @base)
+                        throw new Exception($"Digit {c} is out of range for base {@base}");
+                    bi *= @base;
+                    bi += digit;
+                }
             }
             else if (format == 0)
             {
@@ -211,9 +303,9 @@ namespace TME
                     bi = BigInteger.DivRem(bi, @base, out digit);
                     char digitC;
                     if (digit < 10)
-                        digitC = (char)('0' + digit);
+                        digitC = (char)('0' + (int)digit);
                     else
-                        digitC = (char)('A' + digit - 10);
+                        digitC = (char)('A' + (int)digit - 10);
                     sb.Insert(0, digitC);
                 }
                 return Encoding.UTF8.GetBytes(sb.ToString());
