@@ -206,7 +206,7 @@ namespace TME
                     string curStateS = instRaw[0];
                     string curSymbolS = instRaw[1];
                     string newSymbolS = instRaw[2];
-                    string directionS = instRaw[3];
+                    string directionS = instRaw[3].ToLower();
                     string newStateS = instRaw[4];
 
                     if (!syms.Contains(curSymbolS) || !syms.Contains(newSymbolS))
