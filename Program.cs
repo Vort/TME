@@ -163,9 +163,8 @@ namespace TME
 
         BigInteger GetMachineCount(int size)
         {
-            BigInteger count = BigInteger.One;
-            for (int i = 0; i < size; i++)
-                count *= 16L * (size + 1) * (size + 1);
+            BigInteger count = BigInteger.Pow(size + 1, size * 2);
+            count <<= 4 * size;
             return count;
         }
 
