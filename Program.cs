@@ -98,20 +98,11 @@ namespace TME
                 format = 0;
                 @base = 256;
             }
-            else if (ext == "b2")
+            else if (ext.StartsWith("b") &&
+                int.TryParse(ext.Substring(1), out @base) &&
+                @base >= 2 && @base <= 36)
             {
                 format = 1;
-                @base = 2;
-            }
-            else if (ext == "b10")
-            {
-                format = 1;
-                @base = 10;
-            }
-            else if (ext == "b16")
-            {
-                format = 1;
-                @base = 16;
             }
             else if (ext == "jst")
             {
@@ -158,10 +149,7 @@ namespace TME
         {
             BigInteger count = BigInteger.One;
             for (int i = 0; i < size; i++)
-            {
-                count *= 2 * 2 * 2 * 2;
-                count *= (size + 1) * (size + 1);
-            }
+                count *= 16L * (size + 1) * (size + 1);
             return count;
         }
 
@@ -174,6 +162,10 @@ namespace TME
                     bi = BigInteger.Parse(Encoding.UTF8.GetString(data).Trim());
                 else
                     throw new NotSupportedException();
+            }
+            else if (format == 0)
+            {
+                bi = new BigInteger(new byte[1] { 0 }.Concat(data).Reverse().ToArray());
             }
             else
                 throw new NotSupportedException();
@@ -208,10 +200,31 @@ namespace TME
             }
             else if (format == 1)
             {
-                if (@base == 10)
-                    return Encoding.UTF8.GetBytes(EncodeBI(machine).ToString());
+                var bi = EncodeBI(machine);
+                if (bi.IsZero)
+                    return Encoding.UTF8.GetBytes("0");
+
+                var sb = new StringBuilder();
+                while (bi > BigInteger.Zero)
+                {
+                    BigInteger digit;
+                    bi = BigInteger.DivRem(bi, @base, out digit);
+                    char digitC;
+                    if (digit < 10)
+                        digitC = (char)('0' + digit);
+                    else
+                        digitC = (char)('A' + digit - 10);
+                    sb.Insert(0, digitC);
+                }
+                return Encoding.UTF8.GetBytes(sb.ToString());
+            }
+            else if (format == 0)
+            {
+                var arr = EncodeBI(machine).ToByteArray().Reverse().ToArray();
+                if (arr.Length > 1 && arr[0] == 0)
+                    return arr.Skip(1).ToArray(); // No leading zeroes are needed
                 else
-                    throw new NotSupportedException();
+                    return arr;
             }
             else
                 throw new NotSupportedException();
